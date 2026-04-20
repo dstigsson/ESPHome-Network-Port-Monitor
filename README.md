@@ -11,12 +11,14 @@ This code is only tested on ESPHome version 2026.4 on a ESP32-C6 device. You see
 
 # Installation
 You need a ESP device having basic configuration and connected to ESPHome (and Home Assistant)
-1. Copy the file netcheck.h to your ESPHome folder (same foder as your device yaml file
+1. Copy the file netcheck.h to your ESPHome folder (same folder as your device yaml file)
 2. Copy the code in monitor.yaml to your device in ESPHome, please note the file include example of how the basic blocks may look like.
 The importen part is that you get the includ in the top block:
+```
 esphome:
   includes:
     - netcheck.h
+```
 
 "binary_sensor" have the objects you like  to monitor
 
@@ -26,7 +28,7 @@ esphome:
 
 "interval" this is the part where the configuring of the monitoring takes place.
  - "interval: 30s" - How often to monitor the IP
- - "startup_delay: 20s" - Waiting for the ESP to startupo and seperate the monitors to not run at the same time.
+ - "startup_delay: 20s" - Waiting for the ESP to startup and seperate the monitors to not run at the same time.
  - "lambda"
    - Give auto a uniq id for the monitor like http0
    - Set your monitor inputs; IP, Port, TimeOut
