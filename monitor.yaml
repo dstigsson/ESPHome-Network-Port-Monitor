@@ -1,1 +1,188 @@
+esphome:
+  name: monitor
+  friendly_name: monitor.domain.local
+  includes:
+    - netcheck.h
+
+esp32:
+  board: esp32-c6-devkitc-1
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+ota:
+  - platform: esphome
+    password: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: .domain.local
+  power_save_mode: none
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Monitor Fallback Hotspot"
+    password: "xxxxxxxxxxxx"
+
+captive_portal:
+
+debug:
+  update_interval: 30s
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Stockholm
+    update_interval: 60s
+    servers:
+      - 0.se.pool.ntp.org
+      - 1.se.pool.ntp.org
+      - 2.se.pool.ntp.org
+# Enables Web server, if not needed just delete block
+web_server:
+  port: 80
+  version: 3
+  ota: false
+  log: false
+  auth:
+    username: !secret web_server_username
+    password: !secret web_server_password
+
+# Monitoring objects as Binary Sensors:
+binary_sensor:
+  - platform: template
+    name: "NAS My NAS Server"
+    id: nas_my_nas_server_ssh
+    device_class: connectivity
+
+  - platform: template
+    name: "Router My IoT Router"
+    id: router_my_iot_router_http
+    device_class: connectivity
+
+  - platform: template
+    name: "Router My Router"
+    id: router_my_router_https
+    device_class: connectivity
+
+  - platform: template
+    name: "Camera Outside"
+    id: camera_outside_https
+    device_class: connectivity
+
+  - platform: template
+    name: "Camera Inside"
+    id: camera_inside_https
+    device_class: connectivity
+
+  - platform: template
+    name: "Service Plex"
+    id: service_plex_http
+    device_class: connectivity
+
+# Monitoring objects having extra measurments, in this case ssh latency
+sensor:
+  - platform: template
+    name: "NAS SSH latency"
+    id: nas_my_nas_server_ssh_latency
+    unit_of_measurement: ms
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: never
+
+# Text Sensor setting
+text_sensor:
+  - platform: template
+    name: "Network Monitor Last Problem"
+    id: net_last_problem
+    entity_category: diagnostic
+    update_interval: never
+
+# Monitoring intervals, best practice is to try to separate the intervals to not have to manny monitors running at once
+interval:
+  - interval: 30s
+    startup_delay: 20s
+    then:
+      - lambda: |-
+          auto ssh0 = netmon::tcp_probe("10.10.10.10", 22, 800);
+          id(nas_my_nas_server_ssh).publish_state(ssh0.ok);
+            if (ssh0.ok) {
+              id(nas_my_nas_server_ssh_latency).publish_state(ssh0.latency_ms);
+            } else {
+              id(nas_my_nas_server_ssh_latency).publish_state(NAN);
+              id(net_my_nas_server_last_problem).publish_state(std::string("NAS My NAS Server SSH down: ") + ssh0.error);
+            }
+
+  - interval: 30s
+    startup_delay: 25s
+    then:
+      - lambda: |-
+          auto http0 = netmon::tcp_probe("10.10.10.20", 80, 700);
+          id(router_my_iot_router_http).publish_state(http0.ok);
+            if (!http0.ok) {
+              id(net_last_problem).publish_state(std::string("Router My IoT Router: ") + http0.error);
+            }
+
+  - interval: 30s
+    startup_delay: 35s
+    then:
+      - lambda: |-
+          auto https0 = netmon::tcp_probe("10.10.10.30", 443, 1000);
+          id(router_my_router_https).publish_state(https0.ok);
+            if (!https0.ok) {
+              id(net_last_problem).publish_state(std::string("Router My Router: ") + https0.error);
+            }
+
+  - interval: 60s
+    startup_delay: 40s
+    then:
+      - lambda: |-
+          auto https1 = netmon::tcp_probe("10.10.10.40", 443, 1000);
+          id(camera_outside_https).publish_state(https1.ok);
+            if (!https1.ok) {
+              id(net_last_problem).publish_state(std::string("Camera Outside: ") + https1.error);
+            }
+
+  - interval: 60s
+    startup_delay: 50s
+    then:
+      - lambda: |-
+          auto https2 = netmon::tcp_probe("10.10.10.50", 443, 1000);
+          id(camera_inside_https).publish_state(https2.ok);
+            if (!https2.ok) {
+              id(net_last_problem).publish_state(std::string("Camera Inside: ") + https2.error);
+            }
+
+  - interval: 60s
+    startup_delay: 55s
+    then:
+      - lambda: |-
+          auto https3 = netmon::tcp_probe("10.10.10.60", 32400, 1000);
+          id(service_plex_http).publish_state(https3.ok);
+            if (!https3.ok) {
+              id(net_last_problem).publish_state(std::string("Service Plex: ") + https3.error);
+            }
+
+  - interval: 15s
+    startup_delay: 55s
+    then:
+      - lambda: |-
+          if (id(nas_my_nas_server_ssh).state &&
+              id(router_my_iot_router_http).state &&
+              id(router_my_router_https).state &&
+              id(camera_outside_https).state &&
+              id(camera_inside_https).state &&
+              id(service_plex_http).state) {
+            id(net_last_problem).publish_state("OK");
+          }
 
